@@ -20,30 +20,27 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 import scala.util.parsing.json.JSONObject
 import com.typesafe.config.ConfigFactory
 
-case class SensorSum(time: Long, bid: String, ambient: Double, count: Int)
+case class Accumulator(time: Long, bid: String, var sum: Double, var count: Int)
 
-class AverageAccumulator(
-  var sum: Double,
-  var count: Int
-) extends AggregateFunction[(String, Double), AverageAccumulator, SensorSum] {
+class Aggregator extends AggregateFunction[(String, Double), Accumulator,Accumulator] {
 
-  override def createAccumulator(): AverageAccumulator = {
-    return new AverageAccumulator(0.0, 0)
+  override def createAccumulator(): Accumulator = {
+    return Accumulator(0L, "", 0.0, 0)
   }
 
-  override def merge(a: AverageAccumulator, b: AverageAccumulator): AverageAccumulator = {
-    a.count += b.count
+  override def merge(a: Accumulator, b: Accumulator): Accumulator = {
     a.sum += b.sum
+    a.count += b.count
     return a
   }
 
-  override def add(value: (String, Double), acc: AverageAccumulator): Unit = {
+  override def add(value: (String, Double), acc: Accumulator): Unit = {
     acc.sum += value._2
     acc.count += 1
   }
 
-  override def getResult(acc: AverageAccumulator): SensorSum = {
-    return SensorSum(0L, "", acc.sum, acc.count)
+  override def getResult(acc: Accumulator): Accumulator = {
+    return acc
   }
 }
 
@@ -82,19 +79,19 @@ object App {
       }
       .keyBy(v => v._1)
       .timeWindow(Time.seconds(60))
-      .aggregate(new AverageAccumulator(0.0, 0),
+      .aggregate(new Aggregator(),
         ( key: String,
           window: TimeWindow,
-          input: Iterable[SensorSum],
-          out: Collector[SensorSum] ) => {
+          input: Iterable[Accumulator],
+          out: Collector[Accumulator] ) => {
             var in = input.iterator.next()
-            out.collect(SensorSum(window.getEnd, key, in.ambient/in.count, in.count))
+            out.collect(Accumulator(window.getEnd, key, in.sum/in.count, in.count))
           }
       )
       .map { v =>
         val zdt = new Date(v.time).toInstant().atZone(ZoneId.systemDefault())
         val time = fmt.format(zdt)
-        val json = Map("time" -> time, "bid" -> v.bid, "ambient" -> v.ambient)
+        val json = Map("time" -> time, "bid" -> v.bid, "ambient" -> v.sum)
         val retval = JSONObject(json).toString()
         println(retval)
         retval
