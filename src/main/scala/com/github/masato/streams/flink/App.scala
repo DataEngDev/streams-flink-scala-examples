@@ -22,7 +22,7 @@ import com.typesafe.config.ConfigFactory
 
 case class Accumulator(time: Long, bid: String, var sum: Double, var count: Int)
 
-class Aggregator extends AggregateFunction[(String, Double), Accumulator,Accumulator] {
+class Aggregate extends AggregateFunction[(String, Double), Accumulator,Accumulator] {
 
   override def createAccumulator(): Accumulator = {
     return Accumulator(0L, "", 0.0, 0)
@@ -79,7 +79,7 @@ object App {
       }
       .keyBy(v => v._1)
       .timeWindow(Time.seconds(60))
-      .aggregate(new Aggregator(),
+      .aggregate(new Aggregate(),
         ( key: String,
           window: TimeWindow,
           input: Iterable[Accumulator],
